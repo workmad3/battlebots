@@ -85,34 +85,51 @@ class DeathRoomba < BattleBots::Bots::Bot
   end
 
   ## DEADZONE AVOIDANCE SYSTEM
-  RIGHT_EDGE = 1200
-  LEFT_EDGE = 0
-  TOP_EDGE = 0
-  BOTTOM_EDGE = 800
   BORDER = 70
+
+  def play_min_x
+    @arena_margin.to_f
+  end
+
+  def play_max_x
+    @arena_width.to_f - @arena_margin.to_f
+  end
+
+  def play_min_y
+    @arena_margin.to_f
+  end
+
+  def play_max_y
+    @arena_height.to_f - @arena_margin.to_f
+  end
+
   def stay_clear_of_walls
     turn_right = 3
     turn_left = -3
     bearing = @heading % 360
+    right = play_max_x
+    left = play_min_x
+    bottom = play_max_y
+    top = play_min_y
     # far east
-    if @x > (RIGHT_EDGE - BORDER) && east?(bearing) && north?(bearing) 
+    if @x > (right - BORDER) && east?(bearing) && north?(bearing)
       @turn = turn_left
-    elsif @x > (RIGHT_EDGE - BORDER) && east?(bearing) && south?(bearing)
+    elsif @x > (right - BORDER) && east?(bearing) && south?(bearing)
       @turn = turn_right
     # far west
-    elsif @x < (LEFT_EDGE + BORDER) && west?(bearing) && north?(bearing)
+    elsif @x < (left + BORDER) && west?(bearing) && north?(bearing)
       @turn = turn_right
-    elsif @x < (LEFT_EDGE + BORDER) && west?(bearing) && south?(bearing)
+    elsif @x < (left + BORDER) && west?(bearing) && south?(bearing)
       @turn = turn_left
     # far south
-    elsif @y > (BOTTOM_EDGE - BORDER) && south?(bearing) && east?(bearing)
+    elsif @y > (bottom - BORDER) && south?(bearing) && east?(bearing)
       @turn = turn_left
-    elsif @y > (BOTTOM_EDGE - BORDER) && south?(bearing) && west?(bearing)
+    elsif @y > (bottom - BORDER) && south?(bearing) && west?(bearing)
       @turn = turn_right
     # far north
-    elsif @y < (TOP_EDGE + BORDER) && north?(bearing) && east?(bearing)
+    elsif @y < (top + BORDER) && north?(bearing) && east?(bearing)
       @turn = turn_right
-    elsif @y < (TOP_EDGE + BORDER) && north?(bearing) && west?(bearing)
+    elsif @y < (top + BORDER) && north?(bearing) && west?(bearing)
       @turn = turn_left
     end
   end

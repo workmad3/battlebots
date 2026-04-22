@@ -59,8 +59,9 @@ module BattleBots
         @heading = sensors[:heading]
         @turret = sensors[:turret]
         @contacts = sensors[:contacts]
-        @arena_width = sensors[:width] || 1200
-        @arena_height = sensors[:height] || 800
+        @arena_width = sensors[:width] || 1800
+        @arena_height = sensors[:height] || 1200
+        @arena_margin = sensors[:arena_margin].to_f
       end
 
       def skill_profile

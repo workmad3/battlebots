@@ -1,4 +1,6 @@
+require 'gosu'
 require 'players'
+require 'arena_bounds'
 require 'bots/bot'
 require 'tournament_schedule'
 require 'tournament_health_timeout'
@@ -8,6 +10,7 @@ module BattleBots
   # Single-elimination 1v1 bracket: each match spawns two proxies; winner advances.
   class TournamentWindow < Gosu::Window
     include BattleBots::Players
+    include BattleBots::ArenaBounds
 
     COOLDOWN_FRAMES = 0
     # Assumes ~60 updates/sec (vsync). If both survive, highest health wins unless both are undamaged.
@@ -17,9 +20,12 @@ module BattleBots
     WIN_DISPLAY_FRAMES = 180
     BRACKET_DISPLAY_FRAMES = 240
 
+    # Drawn after all overlays so round / match status stays readable.
+    ROUND_PANEL_BASE_Z = 600
+
     attr_accessor :bullets, :players, :explosions
 
-    def initialize(width = 1200, height = 800, _resize = false)
+    def initialize(width = 1800, height = 1200, _resize = false)
       super(width, height)
       self.caption = 'BattleBots — Tournament'
       @bullets = []
@@ -34,10 +40,14 @@ module BattleBots
       @last_result = nil
       @last_winner_class = nil
       @current_pair = nil
-      @hud_font = Gosu::Font.new(28, name: Gosu.default_font_name)
-      @title_font = Gosu::Font.new(56, name: Gosu.default_font_name)
-      @big_font = Gosu::Font.new(120, name: Gosu.default_font_name)
-      @bracket_font = Gosu::Font.new(18, name: Gosu.default_font_name)
+      @audience_layout = []
+      @audience_body = Gosu::Image.new('media/body.png')
+      @audience_turret = Gosu::Image.new('media/turret.png')
+      @audience_label_font = Gosu::Font.new(11, name: Gosu::default_font_name)
+      @hud_font = Gosu::Font.new(28, name: Gosu::default_font_name)
+      @title_font = Gosu::Font.new(56, name: Gosu::default_font_name)
+      @big_font = Gosu::Font.new(120, name: Gosu::default_font_name)
+      @bracket_font = Gosu::Font.new(18, name: Gosu::default_font_name)
       @bracket_remaining = 0
       setup_next_match!
     end
@@ -66,17 +76,24 @@ module BattleBots
     end
 
     def draw
-      draw_hud
+      draw_margin_shade(0)
+      # Bottom margin only, z under arena frame and fighters so the round panel cannot cover it.
+      draw_audience(0) if show_audience?
+      draw_arena_frame(z: 1)
+
       [players || [], bullets, explosions].each do |collection|
         collection.each(&:draw)
       end
       draw_bracket_overlay if @phase == :bracket
       draw_intro_overlay if @phase == :intro
       draw_match_result_overlay if @phase == :win_display
-      return unless @phase == :complete
 
-      draw_champion_overlay if @schedule.champion
-      draw_void_overlay if @schedule.void_tournament?
+      if @phase == :complete
+        draw_champion_overlay if @schedule.champion
+        draw_void_overlay if @schedule.void_tournament?
+      end
+
+      draw_tournament_round_panel
     end
 
     def button_down(id)
@@ -174,6 +191,8 @@ module BattleBots
       loop do
         matchup = @schedule.current_matchup
         if matchup.nil?
+          @current_pair = nil
+          @audience_layout = []
           @phase = :complete if @schedule.finished?
           @players = []
           return
@@ -186,6 +205,7 @@ module BattleBots
         end
 
         @current_pair = [a, b]
+        rebuild_audience_layout!
         @players = [Proxy.new(self, a), Proxy.new(self, b)]
         @match_ticks_remaining = MATCH_LIMIT_FRAMES
         bullets.clear
@@ -219,43 +239,103 @@ module BattleBots
       if @schedule.finished?
         @phase = :complete
         @players = []
+        @current_pair = nil
+        @audience_layout = []
       else
         setup_next_match!
       end
     end
 
-    def draw_hud
+    def draw_tournament_round_panel
+      return if @phase == :bracket || @phase == :intro || @phase == :win_display
+
       white = 0xff_ffffff
-      x = 12
-      y = 8
-      @hud_font.draw_text("Tournament — Round #{@schedule.round_number}", x, y, 0, 1.0, 1.0, white)
-      y += 32
+      line_h = 26
+      pad_x = 14
+      pad_y = 10
+      origin_x = 12
+      origin_y = 8
+
+      rows = []
+      rows << [:title, "Tournament — Round #{@schedule.round_number}", white]
 
       if @schedule.void_tournament?
-        @hud_font.draw_text('No champion (both undamaged at time limit)', x, y, 0, 1.0, 1.0, white)
-        y += 32
+        rows << [:text, 'No champion (both undamaged at time limit)', white]
       elsif @schedule.champion
-        draw_hud_champion_line(x, y)
-        y += 32
+        rows << [:champion]
       elsif @current_pair
-        draw_hud_match_line(x, y)
-        y += 32
+        rows << [:match]
       end
 
       if @phase == :fighting && @match_ticks_remaining&.positive?
         sec = (@match_ticks_remaining / 60.0).ceil
-        @hud_font.draw_text("Match time left: #{sec}s", x, y, 0, 1.0, 1.0, white)
-        y += 32
+        rows << [:text, "Match time left: #{sec}s", white]
       end
 
       if @phase == :cooldown
-        @hud_font.draw_text("Next match in #{[@cooldown_frames, 0].max}...", x, y, 0, 1.0, 1.0, white)
-        y += 32
+        rows << [:text, "Next match in #{[@cooldown_frames, 0].max}...", white]
       end
 
-      return unless @phase == :bracket || @phase == :intro || @phase == :win_display
+      inner_w = rows.map { |r| round_panel_row_width(r) }.max
+      inner_h = rows.size * line_h
+      box_w = inner_w + pad_x * 2
+      box_h = inner_h + pad_y * 2
+      max_bottom = play_min_y - 8
+      box_y = origin_y
+      if box_y + box_h > max_bottom
+        box_y = [origin_y, max_bottom - box_h].min
+        box_y = 4 if box_y < 4
+      end
+      box_x = origin_x
 
-      @hud_font.draw_text('Space - skip bracket / title / winner animation', x, y, 0, 1.0, 1.0, white)
+      z0 = ROUND_PANEL_BASE_Z
+      z_fill = z0
+      z_border = z0 + 1
+      z_text = z0 + 2
+
+      fill = Gosu::Color.new(245, 22, 26, 40)
+      edge = Gosu::Color.new(255, 120, 200, 240)
+      Gosu.draw_rect(box_x, box_y, box_w, box_h, fill, z_fill)
+      draw_round_panel_border(box_x, box_y, box_w, box_h, z_border, edge)
+
+      tx = box_x + pad_x
+      ty = box_y + pad_y
+      rows.each do |row|
+        case row[0]
+        when :title, :text
+          @hud_font.draw_text(row[1], tx, ty, z_text, 1.0, 1.0, row[2])
+        when :champion
+          draw_hud_champion_line(tx, ty, z_text)
+        when :match
+          draw_hud_match_line(tx, ty, z_text)
+        end
+        ty += line_h
+      end
+    end
+
+    def round_panel_row_width(row)
+      case row[0]
+      when :title, :text
+        @hud_font.text_width(row[1])
+      when :champion
+        k = @schedule.champion
+        @hud_font.text_width('Champion: ') + @hud_font.text_width(k.new.name)
+      when :match
+        a, b = @current_pair
+        ln = a.new.name
+        rn = b.new.name
+        @hud_font.text_width('Match: ') + @hud_font.text_width(ln) + @hud_font.text_width('  vs  ') + @hud_font.text_width(rn)
+      else
+        0
+      end
+    end
+
+    def draw_round_panel_border(x, y, w, h, z, color)
+      t = 2
+      Gosu.draw_rect(x, y, w, t, color, z)
+      Gosu.draw_rect(x, y + h - t, w, t, color, z)
+      Gosu.draw_rect(x, y, t, h, color, z)
+      Gosu.draw_rect(x + w - t, y, t, h, color, z)
     end
 
     def draw_champion_overlay
@@ -374,34 +454,103 @@ module BattleBots
       @hud_font.draw_text(hint, tx, height - 28, 20, 1.0, 1.0, 0xff_bbbbbb)
     end
 
-    def draw_hud_champion_line(x, y)
+    def draw_hud_champion_line(x, y, z)
       k = @schedule.champion
       nm = k.new.name
       pre = 'Champion: '
       white = 0xff_ffffff
-      @hud_font.draw_text(pre, x, y, 0, 1.0, 1.0, white)
+      @hud_font.draw_text(pre, x, y, z, 1.0, 1.0, white)
       x2 = x + @hud_font.text_width(pre)
-      @hud_font.draw_text(nm, x2, y, 0, 1.0, 1.0, name_color_for_bot_class(k))
+      @hud_font.draw_text(nm, x2, y, z, 1.0, 1.0, name_color_for_bot_class(k))
     end
 
-    def draw_hud_match_line(x, y)
+    def draw_hud_match_line(x, y, z)
       a, b = @current_pair
       ln = a.new.name
       rn = b.new.name
       pre = 'Match: '
       mid = '  vs  '
       white = 0xff_ffffff
-      @hud_font.draw_text(pre, x, y, 0, 1.0, 1.0, white)
+      @hud_font.draw_text(pre, x, y, z, 1.0, 1.0, white)
       x2 = x + @hud_font.text_width(pre)
-      @hud_font.draw_text(ln, x2, y, 0, 1.0, 1.0, name_color_for_bot_class(a))
+      @hud_font.draw_text(ln, x2, y, z, 1.0, 1.0, name_color_for_bot_class(a))
       x2 += @hud_font.text_width(ln)
-      @hud_font.draw_text(mid, x2, y, 0, 1.0, 1.0, white)
+      @hud_font.draw_text(mid, x2, y, z, 1.0, 1.0, white)
       x2 += @hud_font.text_width(mid)
-      @hud_font.draw_text(rn, x2, y, 0, 1.0, 1.0, name_color_for_bot_class(b))
+      @hud_font.draw_text(rn, x2, y, z, 1.0, 1.0, name_color_for_bot_class(b))
     end
 
     def name_color_for_bot_class(klass)
       BattleBots::Bots::Bot.name_color_for_source(klass.bot_source)
+    end
+
+    def show_audience?
+      @current_pair && @phase != :complete
+    end
+
+    def rebuild_audience_layout!
+      @audience_layout = []
+      return unless @current_pair
+
+      a, b = @current_pair
+      extras = bot_classes.reject { |k| k == a || k == b }
+      return if extras.empty?
+
+      m = arena_margin
+      n = extras.size
+
+      # All audience in the bottom margin (below play_max_y) so the top round HUD never covers it.
+      if n <= 8
+        place_audience_row!(extras, height - m * 0.52)
+      else
+        half = (n + 1) / 2
+        place_audience_row!(extras[0, half], height - m * 0.68)
+        place_audience_row!(extras[half, n - half], height - m * 0.36)
+      end
+    end
+
+    def place_audience_row!(list, y)
+      m = arena_margin
+      inner_w = width - 2 * m - 24
+      gap = inner_w / [list.size, 1].max
+      base_x = m + 12 + gap * 0.5
+      list.each_with_index do |klass, i|
+        x = base_x + gap * i
+        yy = y
+        @audience_layout << {
+          klass: klass,
+          name: klass.new.name,
+          x: x,
+          y: yy,
+          base_heading: @rng.rand(360),
+          base_turret: @rng.rand(360)
+        }
+      end
+    end
+
+    def draw_audience(z)
+      return if @audience_layout.empty?
+
+      eliminated = @schedule.eliminated_bot_classes
+      t = Gosu.milliseconds * 0.004
+      label_dy = @audience_body.height / 2 + 6
+      @audience_layout.each do |slot|
+        k = slot[:klass]
+        cx = slot[:x]
+        cy = slot[:y]
+        col = BattleBots::Bots::Bot.name_color_for_source(k.bot_source)
+        if eliminated.include?(k)
+          @audience_body.draw_rot(cx, cy, z, slot[:base_heading], 0.5, 0.5, 1, 1)
+        else
+          heading = slot[:base_heading] + 18 * Math.sin(t + slot[:x] * 0.01)
+          turret = slot[:base_turret] + 22 * Math.sin(t * 1.1 + slot[:y] * 0.01)
+          @audience_body.draw_rot(cx, cy, z, heading, 0.5, 0.5, 1, 1)
+          @audience_turret.draw_rot(cx, cy, z, turret, 0.5, 0.5, 1, 1)
+        end
+        nm = slot[:name]
+        tw = @audience_label_font.text_width(nm)
+        @audience_label_font.draw_text(nm, cx - tw / 2, cy + label_dy, z, 1.0, 1.0, col)
+      end
     end
   end
 end

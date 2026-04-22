@@ -3,16 +3,17 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 
 require 'gosu'
 require 'players'
+require 'arena_bounds'
 require 'bots/bot'
-
 
 module BattleBots
   class Game < Gosu::Window
     include BattleBots::Players
+    include BattleBots::ArenaBounds
 
     attr_accessor :bullets, :players, :explosions
 
-    def initialize(x=1200, y=800, resize=false)
+    def initialize(x = 1800, y = 1200, resize = false)
       super
       @players = player_list
       @bullets = []
@@ -36,8 +37,10 @@ module BattleBots
     end
 
     def draw
+      draw_margin_shade(0)
+      draw_arena_frame(z: 1)
       [players, bullets, explosions].each do |collection_of_drawables|
-        collection_of_drawables.each { |drawable| drawable.draw } 
+        collection_of_drawables.each { |drawable| drawable.draw }
       end
 
       if players.length == 1

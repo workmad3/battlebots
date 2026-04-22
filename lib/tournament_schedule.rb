@@ -43,6 +43,19 @@ module BattleBots
       @name_cache[klass] ||= (klass.respond_to?(:new) ? klass.new.name : klass.to_s)
     end
 
+    # Bot classes that have already lost (or drew) and cannot return this tournament.
+    def eliminated_bot_classes
+      @results_log.each_with_object([]) do |e, acc|
+        case e[:outcome]
+        when :left then acc << e[:b]
+        when :right then acc << e[:a]
+        when :draw
+          acc << e[:a]
+          acc << e[:b]
+        end
+      end.uniq
+    end
+
     # Lines for a full-screen bracket summary (opening + between rounds).
     def bracket_overlay_lines(max_lines = 44)
       lines = []

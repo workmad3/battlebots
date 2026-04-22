@@ -78,7 +78,15 @@ module BattleBots
         Gosu::Image.new("media/explosions/explosion2-#{i}.png")
       end
       @gun_sound = Gosu::Sample.new('media/gun.wav')
-      @x, @y = window.width * rand(), window.height * rand()
+      if window.respond_to?(:play_min_x)
+        w = window.play_max_x - window.play_min_x
+        h = window.play_max_y - window.play_min_y
+        @x = window.play_min_x + w * rand
+        @y = window.play_min_y + h * rand
+      else
+        @x = window.width * rand
+        @y = window.height * rand
+      end
       @vel_x = @vel_y = 0.0
     end
 
@@ -107,9 +115,11 @@ module BattleBots
     end
 
     def observe_battlespace
+      m = @window.respond_to?(:arena_margin) ? @window.arena_margin : 0
       battlespace = {
         x: @x, y: @y, health: @health, turret: @turret, heading: @heading, contacts: [],
-        width: @window.width, height: @window.height
+        width: @window.width, height: @window.height,
+        arena_margin: m
       }
 
       @window.players.each do |enemy|
@@ -144,11 +154,18 @@ module BattleBots
       @x += @vel_x
       @y += @vel_y
 
-      # The world is flat but it has walls
-      @x = 0 if @x < 0
-      @y = 0 if @y < 0      
-      @x = @window.width if @x > @window.width
-      @y = @window.height if @y > @window.height
+      # The world is flat but it has walls (inset from the window when ArenaBounds is used).
+      if @window.respond_to?(:play_min_x)
+        @x = @window.play_min_x if @x < @window.play_min_x
+        @y = @window.play_min_y if @y < @window.play_min_y
+        @x = @window.play_max_x if @x > @window.play_max_x
+        @y = @window.play_max_y if @y > @window.play_max_y
+      else
+        @x = 0 if @x < 0
+        @y = 0 if @y < 0
+        @x = @window.width if @x > @window.width
+        @y = @window.height if @y > @window.height
+      end
 
       # Add a velocity decay
       @vel_x *= 0.9
