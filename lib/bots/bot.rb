@@ -1,6 +1,10 @@
 module BattleBots
   module Bots
     class Bot
+      def self.inherited(subclass)
+        super
+        BattleBots::Players.register_bot(subclass)
+      end
 
       DEFAULT_SKILL_LEVEL = 0.25
 
@@ -93,3 +97,4 @@ module BattleBots
     end
   end
 end
+

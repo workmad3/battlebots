@@ -5,7 +5,7 @@ module BattleBots
     def initialize(window, vector, sound)
       @window = window
       @x, @y, @angle, @vel_x, @vel_y = vector
-      @image = Gosu::Image.new(@window, 'media/bullet.png', false)
+      @image = Gosu::Image.new('media/bullet.png', tileable: false)
       sound.play 0.05
     end
 

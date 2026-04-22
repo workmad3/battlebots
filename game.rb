@@ -17,7 +17,7 @@ module BattleBots
       @bullets = []
       @explosions = []
       @winner_played = false
-      @font = Gosu::Font.new(self, Gosu::default_font_name, 200)
+      @font = Gosu::Font.new(200, name: Gosu::default_font_name)
     end
 
     def update
@@ -54,7 +54,7 @@ module BattleBots
     private 
 
     def display_winner(proxy)
-      @font.draw("WINNER!", 200, 300, 0, 1.0, 1.0, 0xffffff00)
+      @font.draw_text("WINNER!", 200, 300, 0, 1.0, 1.0, 0xff_ffff00)
       unless @winner_played
         @winner_played = true
       end

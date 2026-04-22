@@ -20,7 +20,7 @@ module BattleBots
       @heading = rand * 360
       @turret = rand * 360
       track = @bot.sound || 'media/ow.wav'
-      @sound = Gosu::Sample.new(@window, track)
+      @sound = Gosu::Sample.new(track)
     end
 
     def play
@@ -47,7 +47,7 @@ module BattleBots
       if @health > 0
         @body_image.draw_rot(@x, @y, 1, @heading)
         @turret_image.draw_rot(@x, @y, 1, @turret)
-        @font.draw("#{@bot.name}: #{@health.to_i}", @x - 50, @y + 25, 0, 1.0, 1.0, 0xffffff00)
+        @font.draw_text("#{@bot.name}: #{@health.to_i}", @x - 50, @y + 25, 0, 1.0, 1.0, 0xff_ffff00)
       end
     end
 
@@ -63,14 +63,14 @@ module BattleBots
 
     def set_environmentals(window)
       @window = window
-      @body_image = Gosu::Image.new(window, "media/body.png")
-      @turret_image = Gosu::Image.new(window, "media/turret.png")
-      @font = Gosu::Font.new(window, Gosu::default_font_name, 20)
-      @bang = Gosu::Sample.new(window, "media/bang.mp3")
-      @flames = BattleBots::Explosion.frames.map do |i| 
-        Gosu::Image.new(window, "media/explosions/explosion2-#{i}.png")
+      @body_image = Gosu::Image.new("media/body.png")
+      @turret_image = Gosu::Image.new("media/turret.png")
+      @font = Gosu::Font.new(20, name: Gosu::default_font_name)
+      @bang = Gosu::Sample.new("media/bang.mp3")
+      @flames = BattleBots::Explosion.frames.map do |i|
+        Gosu::Image.new("media/explosions/explosion2-#{i}.png")
       end
-      @gun_sound = Gosu::Sample.new(@window, 'media/gun.wav')
+      @gun_sound = Gosu::Sample.new('media/gun.wav')
       @x, @y = window.width * rand(), window.height * rand()
       @vel_x = @vel_y = 0.0
     end
