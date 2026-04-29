@@ -18,7 +18,8 @@ class Tank < BattleBots::Bots::Bot
   end
 
   def think
-    if @tick.nil? || @tick == 20
+    max_tick = 20
+    if @tick.nil? || @tick >= max_tick
       @tick = 0
       @action = rand(4)
     end
