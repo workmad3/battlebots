@@ -44,6 +44,18 @@ Here's the shell of game that we execute by calling `ruby game.rb` from the CLI.
 
 To make a bot, simply extend the `Bot` class and implement the required methods.
 
+The `bot_source` class method can be used to indicate if the bot was written by hand or by ai, by implementing:
+```
+  def self.bot_source = :ai
+```
+or
+```
+  def self.bot_source = :human
+
+```
+
+This will customise the colour used to draw the bot name.
+
 Think of your bot as a brain.  In normal object oriented game code, your bot would be doing most of the work. The Game object would be calling Bot methods and the bot itself would be keeping track of state.
 
 But this is a competitive endeavour and programmers can't be trusted!  So rather than allowing your bot to track state and take actions, your bot will signal its intentions to a Proxy which which will query your bot's wants, track state, and enforce the game rules.
@@ -90,8 +102,7 @@ To submit your bot:
 
   1. For this repo and install the Gosu gem and dependencies
   2. Extend BattleBot::Bot
-  3. Add your bot to players.rb
-  4. Ensure your bot works by running `$ ruby game.rb` in terminal
+  3. Ensure your bot works by running `$ ruby game.rb` in terminal
   4. Create a pull request with your bot's name.
 
 

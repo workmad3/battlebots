@@ -1,28 +1,17 @@
 require 'proxy'
-require 'bots/the_closer'
-require 'bots/the_bully'
-require 'bots/the_chicken'
-require 'bots/the_thinker'
-require 'bots/the_whinger'
-require 'bots/self_destructo'
-require 'bots/spray_and_pray'
-require 'bots/death_roomba'
-require 'bots/speedy'
+require 'bots/bot'
 
 module BattleBots
   module Players
+    def self.register_bot(bot) = bot_classes << bot
+    def self.bot_classes = @bot_classes ||= []
+
+    def bot_classes = BattleBots::Players.bot_classes
 
     def player_list
-      [
-        Proxy.new(self, TheCloser),
-        Proxy.new(self, TheBully),
-        Proxy.new(self, DeathRoomba),
-        Proxy.new(self, TheWhinger),
-        Proxy.new(self, TheThinker),
-        Proxy.new(self, SprayAndPray),
-        Proxy.new(self, Speedy),
-        Proxy.new(self, TheChicken)
-      ].shuffle
+      bot_classes.shuffle.map { |klass| Proxy.new(self, klass) }
     end
   end
 end
+
+Dir["#{File.dirname(__FILE__)}/bots/*.rb"].each { |bot| require bot }

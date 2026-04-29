@@ -1,6 +1,10 @@
 module BattleBots
   module Bots
     class Bot
+      def self.inherited(subclass)
+        super
+        BattleBots::Players.register_bot(subclass)
+      end
 
       DEFAULT_SKILL_LEVEL = 0.25
 
@@ -30,6 +34,24 @@ module BattleBots
         false
       end
 
+      # :builtin = hand-authored; :ai = model-assisted; :human = human-driven (reserved).
+      def self.bot_source
+        :builtin
+      end
+
+      def bot_source
+        self.class.bot_source
+      end
+
+      # Gosu 0xAARRGGBB for name labels (see Proxy, TournamentWindow, bracket).
+      def self.name_color_for_source(source)
+        case source&.to_sym
+        when :ai then 0xff_4499ff
+        when :human then 0xff_ffdd44
+        else 0xff_e54444 # :builtin and unknown
+        end
+      end
+
       def observe(sensors)
         @x = sensors[:x]
         @y = sensors[:y]
@@ -37,7 +59,10 @@ module BattleBots
         @heading = sensors[:heading]
         @turret = sensors[:turret]
         @contacts = sensors[:contacts]
-      end 
+        @arena_width = sensors[:width] || 1800
+        @arena_height = sensors[:height] || 1200
+        @arena_margin = sensors[:arena_margin].to_f
+      end
 
       def skill_profile
         [@speed, @strength, @stamina, @sight].map do |skill| 
@@ -93,3 +118,4 @@ module BattleBots
     end
   end
 end
+

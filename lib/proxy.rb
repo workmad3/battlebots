@@ -1,5 +1,6 @@
 require 'bullets'
 require 'explosion'
+require 'bots/bot'
 
 module BattleBots
   class Proxy
@@ -20,7 +21,7 @@ module BattleBots
       @heading = rand * 360
       @turret = rand * 360
       track = @bot.sound || 'media/ow.wav'
-      @sound = Gosu::Sample.new(@window, track)
+      @sound = Gosu::Sample.new(track)
     end
 
     def play
@@ -47,7 +48,13 @@ module BattleBots
       if @health > 0
         @body_image.draw_rot(@x, @y, 1, @heading)
         @turret_image.draw_rot(@x, @y, 1, @turret)
-        @font.draw("#{@bot.name}: #{@health.to_i}", @x - 50, @y + 25, 0, 1.0, 1.0, 0xffffff00)
+        label = "#{@bot.name}: "
+        hx = @x - 50
+        hy = @y + 25
+        z = 0
+        name_col = BattleBots::Bots::Bot.name_color_for_source(@bot.bot_source)
+        @font.draw_text(label, hx, hy, z, 1.0, 1.0, name_col)
+        @font.draw_text(@health.to_i.to_s, hx + @font.text_width(label), hy, z, 1.0, 1.0, 0xff_eeeeee)
       end
     end
 
@@ -63,15 +70,23 @@ module BattleBots
 
     def set_environmentals(window)
       @window = window
-      @body_image = Gosu::Image.new(window, "media/body.png")
-      @turret_image = Gosu::Image.new(window, "media/turret.png")
-      @font = Gosu::Font.new(window, Gosu::default_font_name, 20)
-      @bang = Gosu::Sample.new(window, "media/bang.mp3")
-      @flames = BattleBots::Explosion.frames.map do |i| 
-        Gosu::Image.new(window, "media/explosions/explosion2-#{i}.png")
+      @body_image = Gosu::Image.new("media/body.png")
+      @turret_image = Gosu::Image.new("media/turret.png")
+      @font = Gosu::Font.new(20, name: Gosu::default_font_name)
+      @bang = Gosu::Sample.new("media/bang.mp3")
+      @flames = BattleBots::Explosion.frames.map do |i|
+        Gosu::Image.new("media/explosions/explosion2-#{i}.png")
       end
-      @gun_sound = Gosu::Sample.new(@window, 'media/gun.wav')
-      @x, @y = window.width * rand(), window.height * rand()
+      @gun_sound = Gosu::Sample.new('media/gun.wav')
+      if window.respond_to?(:play_min_x)
+        w = window.play_max_x - window.play_min_x
+        h = window.play_max_y - window.play_min_y
+        @x = window.play_min_x + w * rand
+        @y = window.play_min_y + h * rand
+      else
+        @x = window.width * rand
+        @y = window.height * rand
+      end
       @vel_x = @vel_y = 0.0
     end
 
@@ -100,8 +115,11 @@ module BattleBots
     end
 
     def observe_battlespace
-      battlespace = { 
-        x: @x, y: @y, health: @health, turret: @turret, heading: @heading, contacts: []
+      m = @window.respond_to?(:arena_margin) ? @window.arena_margin : 0
+      battlespace = {
+        x: @x, y: @y, health: @health, turret: @turret, heading: @heading, contacts: [],
+        width: @window.width, height: @window.height,
+        arena_margin: m
       }
 
       @window.players.each do |enemy|
@@ -136,11 +154,18 @@ module BattleBots
       @x += @vel_x
       @y += @vel_y
 
-      # The world is flat but it has walls
-      @x = 0 if @x < 0
-      @y = 0 if @y < 0      
-      @x = @window.width if @x > @window.width
-      @y = @window.height if @y > @window.height
+      # The world is flat but it has walls (inset from the window when ArenaBounds is used).
+      if @window.respond_to?(:play_min_x)
+        @x = @window.play_min_x if @x < @window.play_min_x
+        @y = @window.play_min_y if @y < @window.play_min_y
+        @x = @window.play_max_x if @x > @window.play_max_x
+        @y = @window.play_max_y if @y > @window.play_max_y
+      else
+        @x = 0 if @x < 0
+        @y = 0 if @y < 0
+        @x = @window.width if @x > @window.width
+        @y = @window.height if @y > @window.height
+      end
 
       # Add a velocity decay
       @vel_x *= 0.9
@@ -159,6 +184,8 @@ module BattleBots
     end
 
     def limit(value, limit)
+      return 0 if value.nil? || limit.nil?
+
       value = limit if value > limit && limit > 0
       value = limit if value < limit && limit < 0
       value

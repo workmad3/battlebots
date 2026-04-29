@@ -61,15 +61,15 @@ class SprayAndPray < BattleBots::Bots::Bot
     shoot_nearest_enemy(false)
   end
 
+  # Nearest playable corner (same inset as Proxy clamp), so behaviour scales with arena size.
   def nearest_corner
-    @nearest_corner ||= begin
-      max_x = 1200
-      closest_x = @x < 600 ? 0 : max_x
-
-      max_y = 800
-      closest_y = @y < 400 ? 0 : max_y
-
-      {x: closest_x, y: closest_y}
-    end
+    mx = @arena_margin.to_f
+    aw = @arena_width.to_f
+    ah = @arena_height.to_f
+    max_x = aw - mx
+    max_y = ah - mx
+    mid_x = aw * 0.5
+    mid_y = ah * 0.5
+    { x: (@x < mid_x ? mx : max_x), y: (@y < mid_y ? mx : max_y) }
   end
 end

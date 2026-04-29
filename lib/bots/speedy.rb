@@ -10,8 +10,8 @@ class Speedy < BattleBots::Bots::Bot
   end
 
   def think
-    toX = 600
-    toY = 400
+    toX = @arena_width * 0.5
+    toY = @arena_height * 0.5
     @last_shot += 1
     @last_shot = 0 if @last_shot == 10000
 

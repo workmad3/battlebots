@@ -4,10 +4,14 @@ GEM
     gosu (1.4.6)
 
 PLATFORMS
+  arm64-darwin-24
   ruby
 
 DEPENDENCIES
   gosu
 
+CHECKSUMS
+  gosu (1.4.6) sha256=80c7fa48cf61f4960ef067fdd1c000d98b4adc8e11faeaa486543d00908a5c15
+
 BUNDLED WITH
-   1.17.2
+  4.0.10
