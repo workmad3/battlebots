@@ -14,7 +14,7 @@ module BattleBots
 
     COOLDOWN_FRAMES = 0
     # Assumes ~60 updates/sec (vsync). If both survive, highest health wins unless both are undamaged.
-    MATCH_TIME_SECONDS = 60
+    MATCH_TIME_SECONDS = 30
     MATCH_LIMIT_FRAMES = MATCH_TIME_SECONDS * 60
     # Match clock runs at ~60 ticks/sec (see tick_match_timeout!). Last 10s: yellow for first 5s, red pulsing for last 5s.
     MATCH_TIMER_RED_LAST_FRAMES = 5 * 60
