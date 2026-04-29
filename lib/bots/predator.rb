@@ -32,10 +32,9 @@ class Predator < BattleBots::Bots::Bot
   # bullet-flight closure plus a margin for our own orbital drift.
   FIRE_RANGE_BUFFER = 70.0
 
-  # Damage-trade thresholds: ignore noise below SIGNAL_HP, treat above DOMINANCE_HP
-  # as a clear winner. These describe the *shape of the data*, not any opponent.
-  SIGNAL_HP    = 5.0
-  DOMINANCE_HP = 5.0
+  # Minimum cumulative damage we treat as "real" signal (filters out noise from
+  # a single graze before we change strategy). Describes the data, not any bot.
+  SIGNAL_HP = 5.0
 
   def initialize
     @name = 'Predator'
@@ -228,21 +227,36 @@ class Predator < BattleBots::Bots::Bot
   def move_to_engage(target)
     distance = Math.hypot(target[:x] - @x, target[:y] - @y)
     target_bearing = bearing_to(target[:x], target[:y])
+    closure = opponent_closure_rate(target, distance)
 
-    desired = orbit_heading(target_bearing, distance, adaptive_preferred_range)
+    desired = orbit_heading(target_bearing, distance, adaptive_preferred_range, closure)
     update_evade_direction
     turn_heading_to(desired)
     @drive = 1
   end
 
-  # Smoothly blends between "directly toward the target" (when too far), pure tangent
-  # (when at preferred range) and "directly away" (when too close), so we hold range
-  # against an opponent that is itself trying to close (e.g. The Bully).
-  def orbit_heading(target_bearing, distance, preferred)
+  # Project the opponent's velocity onto our line of sight. Positive return value
+  # means they are moving toward us — we use it to bias the orbit outward enough
+  # to cancel their closure at the preferred distance.
+  def opponent_closure_rate(track, distance)
+    return 0.0 if distance < 1.0
+
+    -((track[:vx] * (track[:x] - @x) + track[:vy] * (track[:y] - @y)) / distance)
+  end
+
+  # Picks a heading that holds the preferred range against an opponent that is
+  # itself trying to close. The base offset is acos(-closure/my_speed), so at
+  # preferred distance the radial component of our velocity exactly cancels their
+  # closure rate. Distance error then biases us further inward or outward.
+  def orbit_heading(target_bearing, distance, preferred, closure)
+    closure_ratio = (closure / MY_TERMINAL_SPEED).clamp(-0.85, 0.85)
+    base_offset = Math.acos(-closure_ratio) * 180.0 / Math::PI
     d_diff = distance - preferred
-    offset_deg = 90.0 - 90.0 * Math.tanh(d_diff / 50.0)
+    offset_deg = base_offset - 90.0 * Math.tanh(d_diff / 50.0)
     (target_bearing + offset_deg * @evade_dir) % 360.0
   end
+
+  MY_TERMINAL_SPEED = SPEED_PCT / 100.0 * 10.0
 
   # ----- opponent profiling -----
 
@@ -296,35 +310,26 @@ class Predator < BattleBots::Bots::Bot
   #      inside our effective range → sit there, we hit them, they don't hit us.
   #   3. No kite zone: their reach exceeds ours → pick by cumulative damage trade.
   def adaptive_preferred_range
-    return COLD_START_RANGE if cold_start?
+    # Once we have a single observed incoming hit, we know roughly how far the
+    # opponent is firing from. Build a kite range from that.
+    if @max_observed_fire_distance.positive?
+      kite_floor = @max_observed_fire_distance + FIRE_RANGE_BUFFER
 
-    kite_floor = @max_observed_fire_distance + FIRE_RANGE_BUFFER if @max_observed_fire_distance.positive?
-    kite_ceiling = effective_range
+      if kite_floor < MAX_RANGE
+        # Genuine kite zone: their reach + buffer fits inside our effective range.
+        return kite_floor.clamp(MIN_RANGE, MAX_RANGE)
+      end
 
-    if kite_floor && kite_floor < kite_ceiling
-      # Kite zone exists — sit just outside their fire range, where our bullets
-      # still arrive with usable velocity.
-      return kite_floor.clamp(MIN_RANGE, MAX_RANGE)
+      # Their reach exceeds ours. Kiting can't take us out of fire — sit at
+      # default range where our own bullets still bite hard. Brute trade.
+      return DEFAULT_RANGE
     end
 
-    if losing_trade?
-      # No kite zone available, but we are losing the trade. Pull back as far as
-      # our weapon stays effective; we cut their per-hit damage by bullet decay.
-      target = kite_floor || MAX_RANGE
-      return target.clamp(DEFAULT_RANGE, MAX_RANGE)
-    end
+    # No incoming hits yet. If we're already landing damage, hold default range.
+    return DEFAULT_RANGE if @damage_dealt_total >= SIGNAL_HP
 
-    # Either we're winning the trade or we have no signal yet to act on. Engage
-    # at the standard range where our hit rate and bullet velocity are best.
-    DEFAULT_RANGE
-  end
-
-  def cold_start?
-    @damage_taken_total < SIGNAL_HP && @damage_dealt_total < SIGNAL_HP && @tick < 120
-  end
-
-  def losing_trade?
-    @damage_taken_total > @damage_dealt_total + DOMINANCE_HP
+    # Neither side has scored yet — provoke the exchange at cold-start range.
+    COLD_START_RANGE
   end
 
   # Flip strafe direction primarily in response to taking damage (breaks any lead
